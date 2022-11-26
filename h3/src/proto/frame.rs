@@ -1,5 +1,5 @@
 use bytes::{Buf, BufMut, Bytes};
-use std::{convert::TryInto, fmt};
+use std::{convert::TryInto, fmt, io::Write};
 use tracing::trace;
 
 use super::{
@@ -43,6 +43,7 @@ pub enum Frame<B> {
     PushPromise(PushPromise),
     Goaway(StreamId),
     MaxPushId(StreamId),
+    Datagram(Bytes),
     Grease,
 }
 
@@ -77,18 +78,24 @@ impl Frame<PayloadLen> {
         }
 
         let mut payload = buf.take(len as usize);
-        let frame = match ty {
+        let frame = match dbg!(ty) {
             FrameType::HEADERS => Ok(Frame::Headers(payload.copy_to_bytes(len as usize))),
             FrameType::SETTINGS => Ok(Frame::Settings(Settings::decode(&mut payload)?)),
             FrameType::CANCEL_PUSH => Ok(Frame::CancelPush(payload.get_var()?.try_into()?)),
             FrameType::PUSH_PROMISE => Ok(Frame::PushPromise(PushPromise::decode(&mut payload)?)),
             FrameType::GOAWAY => Ok(Frame::Goaway(payload.get_var()?.try_into()?)),
             FrameType::MAX_PUSH_ID => Ok(Frame::MaxPushId(payload.get_var()?.try_into()?)),
+            FrameType::DATAGRAM_WITHOUT_LENGTH | FrameType::DATAGRAM_WITH_LENGTH => {
+                println!("WebTransport Datagrams not supported");
+                buf.advance(len as usize);
+                Err(FrameError::UnknownFrame(ty.0))
+            }
             FrameType::H2_PRIORITY
             | FrameType::H2_PING
             | FrameType::H2_WINDOW_UPDATE
             | FrameType::H2_CONTINUATION => Err(FrameError::UnsupportedFrame(ty.0)),
             _ => {
+                println!("Unknown Frame type! {:X}", ty.0);
                 buf.advance(len as usize);
                 Err(FrameError::UnknownFrame(ty.0))
             }
@@ -124,6 +131,16 @@ where
             Frame::CancelPush(id) => simple_frame_encode(FrameType::CANCEL_PUSH, *id, buf),
             Frame::Goaway(id) => simple_frame_encode(FrameType::GOAWAY, *id, buf),
             Frame::MaxPushId(id) => simple_frame_encode(FrameType::MAX_PUSH_ID, *id, buf),
+            Frame::Datagram(b) => {
+                if b.is_empty() {
+                    FrameType::DATAGRAM_WITHOUT_LENGTH.encode(buf);
+                } else {
+                    FrameType::DATAGRAM_WITH_LENGTH.encode(buf);
+                    buf.write_var(b.remaining() as u64);
+                    // Note: I'm not sure how we could surfaces this error effectively
+                    buf.writer().write_all(b).unwrap();
+                }
+            }
             Frame::Grease => {
                 FrameType::grease().encode(buf);
                 buf.write_var(6);
@@ -185,6 +202,7 @@ impl fmt::Debug for Frame<PayloadLen> {
             Frame::PushPromise(frame) => write!(f, "PushPromise({})", frame.id),
             Frame::Goaway(id) => write!(f, "GoAway({})", id),
             Frame::MaxPushId(id) => write!(f, "MaxPushId({})", id),
+            Frame::Datagram(bytes) => write!(f, "Datagram: {} bytes", bytes.len()),
             Frame::Grease => write!(f, "Grease()"),
         }
     }
@@ -203,6 +221,7 @@ where
             Frame::PushPromise(frame) => write!(f, "PushPromise({})", frame.id),
             Frame::Goaway(id) => write!(f, "GoAway({})", id),
             Frame::MaxPushId(id) => write!(f, "MaxPushId({})", id),
+            Frame::Datagram(bytes) => write!(f, "Datagram: {} bytes", bytes.len()),
             Frame::Grease => write!(f, "Grease()"),
         }
     }
@@ -222,6 +241,7 @@ impl<T, U> PartialEq<Frame<T>> for Frame<U> {
             Frame::PushPromise(x) => matches!(other, Frame::PushPromise(y) if x == y),
             Frame::Goaway(x) => matches!(other, Frame::Goaway(y) if x == y),
             Frame::MaxPushId(x) => matches!(other, Frame::MaxPushId(y) if x == y),
+            Frame::Datagram(x) => matches!(other, Frame::Datagram(y) if x == y),
             Frame::Grease => matches!(other, Frame::Grease),
         }
     }
@@ -254,6 +274,8 @@ frame_types! {
     H2_WINDOW_UPDATE = 0x8,
     H2_CONTINUATION = 0x9,
     MAX_PUSH_ID = 0xD,
+    DATAGRAM_WITHOUT_LENGTH = 0x30,
+    DATAGRAM_WITH_LENGTH = 0x31,
 }
 
 impl FrameType {
@@ -269,7 +291,7 @@ pub struct FrameType(u64);
 
 impl FrameType {
     fn decode<B: Buf>(buf: &mut B) -> Result<Self, UnexpectedEnd> {
-        Ok(FrameType(buf.get_var()?))
+        Ok(dbg!(FrameType(buf.get_var()?)))
     }
     pub fn encode<B: BufMut>(&self, buf: &mut B) {
         buf.write_var(self.0);
@@ -386,9 +408,12 @@ setting_identifiers! {
     QPACK_MAX_TABLE_CAPACITY = 0x1,
     QPACK_MAX_BLOCKED_STREAMS = 0x7,
     MAX_HEADER_LIST_SIZE = 0x6,
+    ENABLE_WEB_TRANSPORT = 0x2b603742,
+    SETTINGS_ENABLE_CONNECT_PROTOCOL = 0x8,
+    H3_DATAGRAM = 0x33,
 }
 
-const SETTINGS_LEN: usize = 4;
+const SETTINGS_LEN: usize = 5;
 
 #[derive(Debug, PartialEq)]
 pub struct Settings {
@@ -585,6 +610,7 @@ mod tests {
                     (SettingId::QPACK_MAX_TABLE_CAPACITY, 0xfad2),
                     (SettingId::QPACK_MAX_BLOCKED_STREAMS, 0xfad3),
                     (SettingId(95), 0),
+                    (SettingId(0), 0),
                 ],
                 len: 4,
             }),
@@ -597,6 +623,7 @@ mod tests {
                     (SettingId::QPACK_MAX_TABLE_CAPACITY, 0xfad2),
                     (SettingId::QPACK_MAX_BLOCKED_STREAMS, 0xfad3),
                     // check without the Grease setting because this is ignored
+                    (SettingId(0), 0),
                     (SettingId(0), 0),
                 ],
                 len: 3,

@@ -8,6 +8,8 @@ use structopt::StructOpt;
 use tokio::{fs::File, io::AsyncReadExt};
 use tracing::{debug, error, info, trace_span, warn};
 
+use time::{Date, Duration, Month, OffsetDateTime, PrimitiveDateTime, Time};
+
 use h3::{error::ErrorLevel, quic::BidiStream, server::RequestStream};
 
 #[derive(StructOpt, Debug)]
@@ -25,7 +27,7 @@ struct Opt {
     #[structopt(
         short,
         long,
-        default_value = "[::1]:4433",
+        default_value = "[::1]:4430",
         help = "What address:port to listen for new connections"
     )]
     pub listen: SocketAddr,
@@ -72,12 +74,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let crypto = load_crypto(opt.certs).await?;
     let server_config = h3_quinn::quinn::ServerConfig::with_crypto(Arc::new(crypto));
+    // debug!("Server config {:?}", server_config);
+    dbg!(&server_config);
     let (endpoint, mut incoming) = h3_quinn::quinn::Endpoint::server(server_config, opt.listen)?;
 
     info!("Listening on {}", opt.listen);
 
     while let Some(new_conn) = incoming.next().await {
         trace_span!("New connection being attempted");
+        info!("New connection");
 
         let root = root.clone();
         tokio::spawn(async move {
@@ -88,6 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let mut h3_conn = h3::server::Connection::new(h3_quinn::Connection::new(conn))
                         .await
                         .unwrap();
+                    info!("h3 now established");
                     loop {
                         match h3_conn.accept().await {
                             Ok(Some((req, stream))) => {
@@ -101,6 +107,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 });
                             }
                             Ok(None) => {
+                                info!("Connection closed");
                                 break;
                             }
                             Err(err) => {
@@ -186,7 +193,18 @@ async fn load_crypto(opt: Certs) -> Result<rustls::ServerConfig, Box<dyn std::er
 
             cert_f.read_to_end(&mut cert_v).await?;
             key_f.read_to_end(&mut key_v).await?;
-            (rustls::Certificate(cert_v), PrivateKey(key_v))
+
+            let key_der = rustls_pemfile::pkcs8_private_keys(&mut &*key_v)
+                .expect("malformed PKCS #8 private key")
+                .pop()
+                .expect("No private keys in PEM file");
+
+            let cert = rustls_pemfile::certs(&mut &*cert_v)
+                .expect("Invalid PEM-encoding for certificate")
+                .pop()
+                .expect("Cert file does not contain any certs");
+
+            (rustls::Certificate(cert), PrivateKey(key_der))
         }
         (_, _) => return Err("cert and key args are mutually dependant".into()),
     };
@@ -197,7 +215,8 @@ async fn load_crypto(opt: Certs) -> Result<rustls::ServerConfig, Box<dyn std::er
         .with_protocol_versions(&[&rustls::version::TLS13])
         .unwrap()
         .with_no_client_auth()
-        .with_single_cert(vec![cert], key)?;
+        .with_single_cert(vec![cert], key)
+        .unwrap();
     crypto.max_early_data_size = u32::MAX;
     crypto.alpn_protocols = vec![ALPN.into()];
 
@@ -205,8 +224,54 @@ async fn load_crypto(opt: Certs) -> Result<rustls::ServerConfig, Box<dyn std::er
 }
 
 pub fn build_certs() -> (Certificate, PrivateKey) {
-    let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
-    let key = PrivateKey(cert.serialize_private_key_der());
-    let cert = Certificate(cert.serialize_der().unwrap());
+    // let mut params = rcgen::CertificateParams::new(vec!["localhost".into()]);
+    // params.not_before = OffsetDateTime::now_utc();
+    // params.not_after = OffsetDateTime::now_utc() + Duration::days(10);
+    // params.alg = &rcgen::PKCS_ECDSA_P256_SHA256;
+    // let cert = rcgen::Certificate::from_params(params).unwrap();
+
+    // // let public_der = cert.get_key_pair().public_key_der();
+    // let cert_der = cert.serialize_der().unwrap();
+    // std::fs::write("./der_test", cert.serialize_private_key_pem()).unwrap();
+    // std::fs::write("./der_test.cert", cert.serialize_pem().unwrap()).unwrap();
+    // let cert_pem = std::fs::read("./der_test.cert").unwrap();
+    let cert_pem = std::fs::File::open("./der_test.cert").unwrap();
+    let mut cert_pem = std::io::BufReader::new(cert_pem);
+    let priv_key_pem = std::fs::File::open("./der_test").unwrap();
+    let mut priv_key_pem = std::io::BufReader::new(priv_key_pem);
+
+    let cert_der = rustls_pemfile::certs(&mut cert_pem).unwrap();
+    let cert_der = cert_der.first().unwrap();
+
+    let priv_key_der = rustls_pemfile::pkcs8_private_keys(&mut priv_key_pem).unwrap();
+    let priv_key_der = priv_key_der.first().unwrap();
+
+    let hash = ring::digest::digest(&ring::digest::SHA256, &cert_der);
+
+    let fingerprint_hex = hash
+        .as_ref()
+        .iter()
+        .map(|v| format!("{:02X?}", v))
+        .collect::<Vec<_>>()
+        .join(":");
+    println!("Cert identifier: {}", fingerprint_hex);
+
+    let hash = ring::digest::digest(&ring::digest::SHA256, &cert_der);
+
+    let hash = hash
+        .as_ref()
+        .into_iter()
+        .into_iter()
+        .map(|b| format!("{:02X}", b))
+        .collect::<Vec<_>>()
+        .join(":");
+
+    println!("Cert identifier 2 electric booagloo: {}", hash);
+
+    // let key = PrivateKey(cert.serialize_private_key_der());
+    // let cert = Certificate(cert.serialize_der().unwrap());
+
+    let key = PrivateKey(priv_key_der.clone());
+    let cert = Certificate(cert_der.clone());
     (cert, key)
 }

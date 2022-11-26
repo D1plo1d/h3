@@ -77,7 +77,7 @@ impl Frame<PayloadLen> {
         }
 
         let mut payload = buf.take(len as usize);
-        let frame = match ty {
+        let frame = match dbg!(ty) {
             FrameType::HEADERS => Ok(Frame::Headers(payload.copy_to_bytes(len as usize))),
             FrameType::SETTINGS => Ok(Frame::Settings(Settings::decode(&mut payload)?)),
             FrameType::CANCEL_PUSH => Ok(Frame::CancelPush(payload.get_var()?.try_into()?)),
@@ -89,6 +89,7 @@ impl Frame<PayloadLen> {
             | FrameType::H2_WINDOW_UPDATE
             | FrameType::H2_CONTINUATION => Err(FrameError::UnsupportedFrame(ty.0)),
             _ => {
+                println!("Unknown Frame type! {:X}", ty.0);
                 buf.advance(len as usize);
                 Err(FrameError::UnknownFrame(ty.0))
             }
@@ -386,6 +387,8 @@ setting_identifiers! {
     QPACK_MAX_TABLE_CAPACITY = 0x1,
     QPACK_MAX_BLOCKED_STREAMS = 0x7,
     MAX_HEADER_LIST_SIZE = 0x6,
+    ENABLE_WEB_TRANSPORT = 0x2b603742,
+    SETTINGS_ENABLE_CONNECT_PROTOCOL = 0x8,
 }
 
 const SETTINGS_LEN: usize = 4;

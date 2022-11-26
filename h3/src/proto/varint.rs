@@ -73,6 +73,7 @@ impl VarInt {
         }
         let mut buf = [0; 8];
         buf[0] = r.get_u8();
+        println!("{:X}", &buf[0]);
         let tag = buf[0] >> 6;
         buf[0] &= 0b0011_1111;
         let x = match tag {

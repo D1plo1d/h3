@@ -25,7 +25,7 @@ struct Opt {
     #[structopt(
         short,
         long,
-        default_value = "[::1]:4433",
+        default_value = "[::1]:4430",
         help = "What address:port to listen for new connections"
     )]
     pub listen: SocketAddr,
@@ -78,6 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     while let Some(new_conn) = incoming.next().await {
         trace_span!("New connection being attempted");
+        info!("New connection");
 
         let root = root.clone();
         tokio::spawn(async move {
@@ -88,6 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let mut h3_conn = h3::server::Connection::new(h3_quinn::Connection::new(conn))
                         .await
                         .unwrap();
+                    info!("h3 now established");
                     loop {
                         match h3_conn.accept().await {
                             Ok(Some((req, stream))) => {
@@ -101,6 +103,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 });
                             }
                             Ok(None) => {
+                                info!("Connection closed");
                                 break;
                             }
                             Err(err) => {
@@ -186,7 +189,18 @@ async fn load_crypto(opt: Certs) -> Result<rustls::ServerConfig, Box<dyn std::er
 
             cert_f.read_to_end(&mut cert_v).await?;
             key_f.read_to_end(&mut key_v).await?;
-            (rustls::Certificate(cert_v), PrivateKey(key_v))
+
+            let key_der = rustls_pemfile::pkcs8_private_keys(&mut &*key_v)
+                .expect("malformed PKCS #8 private key")
+                .pop()
+                .expect("No private keys in PEM file");
+
+            let cert = rustls_pemfile::certs(&mut &*cert_v)
+                .expect("Invalid PEM-encoding for certificate")
+                .pop()
+                .expect("Cert file does not contain any certs");
+
+            (rustls::Certificate(cert), PrivateKey(key_der))
         }
         (_, _) => return Err("cert and key args are mutually dependant".into()),
     };
@@ -197,7 +211,8 @@ async fn load_crypto(opt: Certs) -> Result<rustls::ServerConfig, Box<dyn std::er
         .with_protocol_versions(&[&rustls::version::TLS13])
         .unwrap()
         .with_no_client_auth()
-        .with_single_cert(vec![cert], key)?;
+        .with_single_cert(vec![cert], key)
+        .unwrap();
     crypto.max_early_data_size = u32::MAX;
     crypto.alpn_protocols = vec![ALPN.into()];
 

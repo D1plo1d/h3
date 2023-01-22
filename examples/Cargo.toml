@@ -20,6 +20,8 @@ structopt = "0.3"
 tokio = { version = "1.6", features = ["full"] }
 tracing = "0.1.10"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "ansi", "env-filter", "time", "tracing-log"] }
+rustls-pemfile = "1.0.0"
+time = "0.3.17"
 
 [[example]]
 name = "client"
@@ -28,3 +30,6 @@ path = "client.rs"
 [[example]]
 name = "server"
 path = "server.rs"
+
+[dependencies]
+ring = "0.16.20"

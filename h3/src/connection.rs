@@ -115,6 +115,20 @@ where
             .insert(SettingId::MAX_HEADER_LIST_SIZE, max_field_section_size)
             .map_err(|e| Code::H3_INTERNAL_ERROR.with_cause(e))?;
 
+        settings
+            .insert(SettingId::ENABLE_WEB_TRANSPORT, 1)
+            .map_err(|e| Code::H3_INTERNAL_ERROR.with_cause(e))?;
+
+        settings
+            .insert(SettingId::SETTINGS_ENABLE_CONNECT_PROTOCOL, 1)
+            .map_err(|e| Code::H3_INTERNAL_ERROR.with_cause(e))?;
+
+        settings
+            .insert(SettingId::H3_DATAGRAM, 1)
+            .map_err(|e| Code::H3_INTERNAL_ERROR.with_cause(e))?;
+
+        println!("ENABLED WEB TRANSPORT");
+
         if grease {
             //  Grease Settings (https://www.rfc-editor.org/rfc/rfc9114.html#name-defined-settings-parameters)
             //= https://www.rfc-editor.org/rfc/rfc9114#section-7.2.4.1
@@ -163,7 +177,7 @@ where
         //# as soon as the transport is ready to send data.
         stream::write(
             &mut control_send,
-            (StreamType::CONTROL, Frame::Settings(settings)),
+            (StreamType::CONTROL, Frame::Settings(dbg!(settings))),
         )
         .await?;
 
@@ -339,6 +353,7 @@ where
             Some(frame) => {
                 match frame {
                     Frame::Settings(settings) if !self.got_peer_settings => {
+                        dbg!(&settings);
                         //= https://www.rfc-editor.org/rfc/rfc9114#section-7.2.4
                         //= type=TODO
                         //# A receiver MAY treat the presence of duplicate

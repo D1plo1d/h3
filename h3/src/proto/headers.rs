@@ -405,7 +405,7 @@ impl HeaderError {
     where
         N: AsRef<[u8]>,
     {
-        HeaderError::InvalidHeaderName(format!("{:?}", name.as_ref()))
+        HeaderError::InvalidHeaderName(format!("{:?}", String::from_utf8_lossy(name.as_ref())))
     }
 
     fn invalid_value<N, V>(name: N, value: V) -> Self

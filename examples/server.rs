@@ -277,6 +277,7 @@ pub fn build_certs() -> (Certificate, PrivateKey) {
     // std::fs::write("./der_test", cert.serialize_private_key_pem()).unwrap();
     // std::fs::write("./der_test.cert", cert.serialize_pem().unwrap()).unwrap();
     // let cert_pem = std::fs::read("./der_test.cert").unwrap();
+
     let cert_pem = std::fs::File::open("./der_test.cert").unwrap();
     let mut cert_pem = std::io::BufReader::new(cert_pem);
     let priv_key_pem = std::fs::File::open("./der_test").unwrap();

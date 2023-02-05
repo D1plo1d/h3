@@ -119,9 +119,14 @@ where
             .insert(SettingId::ENABLE_WEB_TRANSPORT, 1)
             .map_err(|e| Code::H3_INTERNAL_ERROR.with_cause(e))?;
 
+        // TODO: 256 is an arbitrary value. This should be configurable
         settings
-            .insert(SettingId::SETTINGS_ENABLE_CONNECT_PROTOCOL, 1)
+            .insert(SettingId::SETTINGS_MAX_WEBTRANSPORT_SESSIONS, 256)
             .map_err(|e| Code::H3_INTERNAL_ERROR.with_cause(e))?;
+
+        // settings
+        //     .insert(SettingId::SETTINGS_ENABLE_CONNECT_PROTOCOL, 1)
+        //     .map_err(|e| Code::H3_INTERNAL_ERROR.with_cause(e))?;
 
         settings
             .insert(SettingId::H3_DATAGRAM, 1)
@@ -353,7 +358,7 @@ where
             Some(frame) => {
                 match frame {
                     Frame::Settings(settings) if !self.got_peer_settings => {
-                        dbg!(&settings);
+                        dbg!(("incoming", &settings));
                         //= https://www.rfc-editor.org/rfc/rfc9114#section-7.2.4
                         //= type=TODO
                         //# A receiver MAY treat the presence of duplicate

@@ -60,7 +60,7 @@ impl From<usize> for PayloadLen {
 }
 
 impl Frame<PayloadLen> {
-    pub const MAX_ENCODED_SIZE: usize = VarInt::MAX_SIZE * 3;
+    pub const MAX_ENCODED_SIZE: usize = VarInt::MAX_SIZE * SETTINGS_LEN;
 
     pub fn decode<T: Buf>(buf: &mut T) -> Result<Self, FrameError> {
         let remaining = buf.remaining();
@@ -101,6 +101,7 @@ impl Frame<PayloadLen> {
             }
         };
         if let Ok(frame) = &frame {
+            dbg!(&frame);
             trace!(
                 "got frame {:?}, len: {}, remaining: {}",
                 frame,
@@ -291,7 +292,7 @@ pub struct FrameType(u64);
 
 impl FrameType {
     fn decode<B: Buf>(buf: &mut B) -> Result<Self, UnexpectedEnd> {
-        Ok(dbg!(FrameType(buf.get_var()?)))
+        Ok(FrameType(buf.get_var()?))
     }
     pub fn encode<B: BufMut>(&self, buf: &mut B) {
         buf.write_var(self.0);
@@ -369,7 +370,10 @@ impl SettingId {
             self,
             SettingId::MAX_HEADER_LIST_SIZE
                 | SettingId::QPACK_MAX_TABLE_CAPACITY
-                | SettingId::QPACK_MAX_BLOCKED_STREAMS,
+                | SettingId::QPACK_MAX_BLOCKED_STREAMS
+                | SettingId::ENABLE_WEB_TRANSPORT
+                | SettingId::SETTINGS_MAX_WEBTRANSPORT_SESSIONS
+                | SettingId::H3_DATAGRAM,
         )
     }
 
@@ -406,14 +410,25 @@ macro_rules! setting_identifiers {
 
 setting_identifiers! {
     QPACK_MAX_TABLE_CAPACITY = 0x1,
-    QPACK_MAX_BLOCKED_STREAMS = 0x7,
     MAX_HEADER_LIST_SIZE = 0x6,
+    QPACK_MAX_BLOCKED_STREAMS = 0x7,
+    H3_DATAGRAM = 0xffd277,
     ENABLE_WEB_TRANSPORT = 0x2b603742,
-    SETTINGS_ENABLE_CONNECT_PROTOCOL = 0x8,
-    H3_DATAGRAM = 0x33,
+    SETTINGS_MAX_WEBTRANSPORT_SESSIONS = 0x2b603743,
+
+    // Per: 3.2.  Extended CONNECT in HTTP/3
+    //
+    // [RFC8441] defines an extended CONNECT method in Section 4, enabled by
+    // the SETTINGS_ENABLE_CONNECT_PROTOCOL parameter.  That parameter is
+    // only defined for HTTP/2.  This document does not create a new multi-
+    // purpose parameter to indicate support for extended CONNECT in HTTP/3;
+    // instead, the SETTINGS_ENABLE_WEBTRANSPORT setting implies that an
+    // endpoint supports extended CONNECT.
+
+    // SETTINGS_ENABLE_CONNECT_PROTOCOL = 0x8,
 }
 
-const SETTINGS_LEN: usize = 5;
+const SETTINGS_LEN: usize = 7;
 
 #[derive(Debug, PartialEq)]
 pub struct Settings {
@@ -497,6 +512,12 @@ impl Settings {
                 return Err(SettingsError::InvalidSettingId(identifier.0));
             }
 
+            println!(
+                "incoming setting {:x?}, {:?}: {:?}",
+                &identifier.0,
+                value,
+                identifier.is_supported()
+            );
             if identifier.is_supported() {
                 //= https://www.rfc-editor.org/rfc/rfc9114#section-7.2.4.1
                 //# Setting identifiers that were defined in [HTTP/2] where there is no

@@ -170,7 +170,7 @@ where
 
         let frame = future::poll_fn(|cx| stream.poll_next(cx)).await;
 
-        let mut encoded = match frame {
+        let mut encoded = match dbg!(frame) {
             Ok(Some(Frame::Headers(h))) => h,
 
             //= https://www.rfc-editor.org/rfc/rfc9114#section-4.1
@@ -391,6 +391,7 @@ where
 
     fn poll_control(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
         while let Poll::Ready(frame) = self.inner.poll_control(cx)? {
+            dbg!(("server incoming", &frame));
             match frame {
                 Frame::Settings(_) => trace!("Got settings"),
                 Frame::Goaway(id) => {

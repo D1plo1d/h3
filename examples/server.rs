@@ -2,7 +2,7 @@ use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use bytes::{Bytes, BytesMut};
 use futures::StreamExt;
-use http::{HeaderValue, Method, Request, StatusCode};
+use http::{HeaderValue, Method, Request, StatusCode, Version};
 use rustls::{Certificate, PrivateKey};
 use structopt::StructOpt;
 use tokio::{fs::File, io::AsyncReadExt};
@@ -182,15 +182,15 @@ async fn handle_request<T>(
 where
     T: BidiStream<Bytes>,
 {
+    let mut is_webtransport = false;
+
     let (status, to_serve) = if dbg!(req.method() == Method::CONNECT) {
         let origin = req.headers().get("origin");
 
         if dbg!(req.uri().path()) != "/wt" {
             (StatusCode::NOT_FOUND, None)
-        } else if dbg!(origin) != Some(&"http://localhost:8000".parse()?) {
-            debug!("Incorrect Origin: {origin:?}");
-            (StatusCode::INTERNAL_SERVER_ERROR, None)
         } else {
+            is_webtransport = true;
             (StatusCode::OK, None)
         }
     } else {
@@ -210,7 +210,13 @@ where
         }
     };
 
-    let resp = http::Response::builder().status(status).body(()).unwrap();
+    dbg!(&status, &to_serve);
+    let resp = http::Response::builder()
+        .version(Version::HTTP_3)
+        .status(status)
+        .body(())
+        .unwrap();
+    dbg!(&resp);
 
     match stream.send_response(resp).await {
         Ok(_) => {
@@ -231,7 +237,15 @@ where
         }
     }
 
-    Ok(stream.finish().await?)
+    if !is_webtransport {
+        return Ok(stream.finish().await?);
+    }
+
+    while let Some(msg_in) = stream.recv_data().await? {
+        dbg!("received message!");
+    }
+    debug!("Web Transport connection closed");
+    Ok(())
 }
 
 // static ALPN: &[u8] = b"h3";

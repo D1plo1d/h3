@@ -372,7 +372,7 @@ impl SettingId {
                 | SettingId::QPACK_MAX_TABLE_CAPACITY
                 | SettingId::QPACK_MAX_BLOCKED_STREAMS
                 | SettingId::ENABLE_WEB_TRANSPORT
-                | SettingId::SETTINGS_MAX_WEBTRANSPORT_SESSIONS
+                | SettingId::MAX_WEBTRANSPORT_SESSIONS
                 | SettingId::H3_DATAGRAM,
         )
     }
@@ -414,7 +414,7 @@ setting_identifiers! {
     QPACK_MAX_BLOCKED_STREAMS = 0x7,
     H3_DATAGRAM = 0xffd277,
     ENABLE_WEB_TRANSPORT = 0x2b603742,
-    SETTINGS_MAX_WEBTRANSPORT_SESSIONS = 0x2b603743,
+    MAX_WEBTRANSPORT_SESSIONS = 0x2b603743,
 
     // Per: 3.2.  Extended CONNECT in HTTP/3
     //
@@ -628,6 +628,8 @@ mod tests {
             Frame::Settings(Settings {
                 entries: [
                     (SettingId::MAX_HEADER_LIST_SIZE, 0xfad1),
+                    (SettingId::ENABLE_WEB_TRANSPORT, 1),
+                    (SettingId::MAX_WEBTRANSPORT_SESSIONS, 256),
                     (SettingId::QPACK_MAX_TABLE_CAPACITY, 0xfad2),
                     (SettingId::QPACK_MAX_BLOCKED_STREAMS, 0xfad3),
                     (SettingId(95), 0),
@@ -641,6 +643,8 @@ mod tests {
             Frame::Settings(Settings {
                 entries: [
                     (SettingId::MAX_HEADER_LIST_SIZE, 0xfad1),
+                    (SettingId::ENABLE_WEB_TRANSPORT, 1),
+                    (SettingId::MAX_WEBTRANSPORT_SESSIONS, 256),
                     (SettingId::QPACK_MAX_TABLE_CAPACITY, 0xfad2),
                     (SettingId::QPACK_MAX_BLOCKED_STREAMS, 0xfad3),
                     // check without the Grease setting because this is ignored

@@ -2,11 +2,11 @@ use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 
 use bytes::{Bytes, BytesMut};
 use futures::StreamExt;
-use http::{Request, StatusCode};
+use http::{HeaderValue, Method, Request, StatusCode};
 use rustls::{Certificate, PrivateKey};
 use structopt::StructOpt;
 use tokio::{fs::File, io::AsyncReadExt};
-use tracing::{error, info, trace_span};
+use tracing::{debug, error, info, trace_span};
 
 use time::{Date, Duration, Month, OffsetDateTime, PrimitiveDateTime, Time};
 
@@ -182,16 +182,29 @@ async fn handle_request<T>(
 where
     T: BidiStream<Bytes>,
 {
-    let (status, to_serve) = match serve_root.as_deref() {
-        None => (StatusCode::OK, None),
-        Some(_) if req.uri().path().contains("..") => (StatusCode::NOT_FOUND, None),
-        Some(root) => {
-            let to_serve = root.join(req.uri().path().strip_prefix('/').unwrap_or(""));
-            match File::open(&to_serve).await {
-                Ok(file) => (StatusCode::OK, Some(file)),
-                Err(e) => {
-                    error!("failed to open: \"{}\": {}", to_serve.to_string_lossy(), e);
-                    (StatusCode::NOT_FOUND, None)
+    let (status, to_serve) = if dbg!(req.method() == Method::CONNECT) {
+        let origin = req.headers().get("origin");
+
+        if dbg!(req.uri().path()) != "/wt" {
+            (StatusCode::NOT_FOUND, None)
+        } else if dbg!(origin) != Some(&"http://localhost:8000".parse()?) {
+            debug!("Incorrect Origin: {origin:?}");
+            (StatusCode::INTERNAL_SERVER_ERROR, None)
+        } else {
+            (StatusCode::OK, None)
+        }
+    } else {
+        match serve_root.as_deref() {
+            None => (StatusCode::OK, None),
+            Some(_) if req.uri().path().contains("..") => (StatusCode::NOT_FOUND, None),
+            Some(root) => {
+                let to_serve = root.join(req.uri().path().strip_prefix('/').unwrap_or(""));
+                match File::open(&to_serve).await {
+                    Ok(file) => (StatusCode::OK, Some(file)),
+                    Err(e) => {
+                        error!("failed to open: \"{}\": {}", to_serve.to_string_lossy(), e);
+                        (StatusCode::NOT_FOUND, None)
+                    }
                 }
             }
         }

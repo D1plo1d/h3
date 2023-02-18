@@ -121,7 +121,7 @@ where
 
         // TODO: 256 is an arbitrary value. This should be configurable
         settings
-            .insert(SettingId::SETTINGS_MAX_WEBTRANSPORT_SESSIONS, 256)
+            .insert(SettingId::MAX_WEBTRANSPORT_SESSIONS, 256)
             .map_err(|e| Code::H3_INTERNAL_ERROR.with_cause(e))?;
 
         // settings

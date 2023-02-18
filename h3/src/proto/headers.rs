@@ -161,6 +161,10 @@ impl Iterator for HeaderIter {
                 return Some((":scheme", scheme.as_str().as_bytes()).into());
             }
 
+            if let Some(protocol) = pseudo.protocol.take() {
+                return Some((":protocol", protocol.as_str()).into());
+            }
+
             if let Some(authority) = pseudo.authority.take() {
                 return Some((":authority", authority.as_str().as_bytes()).into());
             }
@@ -206,6 +210,10 @@ impl TryFrom<Vec<HeaderField>> for Header {
                     pseudo.scheme = Some(s);
                     pseudo.len += 1;
                 }
+                Field::Protocol(s) => {
+                    pseudo.protocol = Some(s);
+                    pseudo.len += 1;
+                }
                 Field::Authority(a) => {
                     pseudo.authority = Some(a);
                     pseudo.len += 1;
@@ -231,6 +239,7 @@ impl TryFrom<Vec<HeaderField>> for Header {
 enum Field {
     Method(Method),
     Scheme(Scheme),
+    Protocol(String),
     Authority(Authority),
     Path(PathAndQuery),
     Status(StatusCode),
@@ -268,6 +277,7 @@ impl Field {
         Ok(match name {
             b":scheme" => Field::Scheme(try_value(name, value)?),
             b":authority" => Field::Authority(try_value(name, value)?),
+            b":protocol" => Field::Protocol(try_value(name, value)?),
             b":path" => Field::Path(try_value(name, value)?),
             b":method" => Field::Method(
                 Method::from_bytes(value.as_ref())
@@ -310,6 +320,7 @@ struct Pseudo {
     // Request
     method: Option<Method>,
     scheme: Option<Scheme>,
+    protocol: Option<String>,
     authority: Option<Authority>,
     path: Option<PathAndQuery>,
 
@@ -361,6 +372,7 @@ impl Pseudo {
         Self {
             method: Some(method),
             scheme: scheme.or(Some(Scheme::HTTPS)),
+            protocol: None,
             authority,
             path: Some(path),
             status: None,
@@ -377,6 +389,7 @@ impl Pseudo {
         Pseudo {
             method: None,
             scheme: None,
+            protocol: None,
             authority: None,
             path: None,
             status: Some(status),

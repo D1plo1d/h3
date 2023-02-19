@@ -167,6 +167,8 @@ where
     Push(u64, FrameStream<S, B>),
     Encoder(S),
     Decoder(S),
+    WebTransportUnidirectional(S),
+    WebTransportBidirectional(S),
     Reserved,
 }
 
@@ -206,6 +208,12 @@ where
             ),
             StreamType::ENCODER => AcceptedRecvStream::Encoder(self.stream),
             StreamType::DECODER => AcceptedRecvStream::Decoder(self.stream),
+            StreamType::WEBTRANSPORT_UNIDIRECTIONAL => {
+                AcceptedRecvStream::WebTransportUnidirectional(self.stream)
+            }
+            StreamType::WEBTRANSPORT_BIDIRECTIONAL => {
+                AcceptedRecvStream::WebTransportBidirectional(self.stream)
+            }
             t if t.value() > 0x21 && (t.value() - 0x21) % 0x1f == 0 => AcceptedRecvStream::Reserved,
 
             //= https://www.rfc-editor.org/rfc/rfc9114#section-6.2

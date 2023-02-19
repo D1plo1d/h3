@@ -66,7 +66,7 @@ use tokio::sync::mpsc;
 use crate::{
     connection::{self, ConnectionInner, ConnectionState, SharedStateRef},
     error::{Code, Error, ErrorLevel},
-    frame::FrameStream,
+    frame::{FrameStream, FrameStreamError},
     proto::{frame::Frame, headers::Header, varint::VarInt},
     qpack,
     quic::{self, RecvStream as _, SendStream as _},
@@ -368,6 +368,7 @@ where
                     }
                 }
                 Poll::Ready(Ok(Some(mut s))) => {
+                    tracing::info!("NEW STREAM~!!!! {:?}", s.id());
                     // When the connection is in a graceful shutdown procedure, reject all
                     // incoming requests not belonging to the grace interval. It's possible that
                     // some acceptable request streams arrive after rejected requests.
@@ -597,6 +598,12 @@ where
     /// Receive an optional set of trailers for the request
     pub async fn recv_trailers(&mut self) -> Result<Option<HeaderMap>, Error> {
         self.inner.recv_trailers().await
+    }
+
+    /// Await messages for a Web Transport connect request stream - this is used to determine when the
+    /// WebTransport session has ended.
+    pub async fn recv_web_transport_stream(&mut self) -> Result<Option<impl bytes::Buf>, Error> {
+        Ok(future::poll_fn(|cx| self.inner.stream.poll_data(cx)).await?)
     }
 
     /// Tell the peer to stop sending into the underlying QUIC stream

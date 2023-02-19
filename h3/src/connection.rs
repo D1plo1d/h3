@@ -317,12 +317,16 @@ where
                         ));
                     }
                 }
+                stream @ AcceptedRecvStream::WebTransportBidirectional(_)
+                | stream @ AcceptedRecvStream::WebTransportUnidirectional(_) => {
+                    panic!("RECEIVED A WEBTRANSPORT STREAM!!!!");
+                }
 
                 //= https://www.rfc-editor.org/rfc/rfc9114#section-6.2.3
                 //= type=implication
                 //# Endpoints MUST NOT consider these streams to have any meaning upon
                 //# receipt.
-                _ => (),
+                AcceptedRecvStream::Push(..) | AcceptedRecvStream::Reserved => (),
             }
         }
 

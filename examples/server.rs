@@ -214,8 +214,10 @@ where
     let resp = http::Response::builder()
         .version(Version::HTTP_3)
         .status(status)
+        .header("Sec-Webtransport-Http3-Draft", "draft02")
         .body(())
         .unwrap();
+
     dbg!(&resp);
 
     match stream.send_response(resp).await {
@@ -241,7 +243,7 @@ where
         return Ok(stream.finish().await?);
     }
 
-    while let Some(msg_in) = stream.recv_data().await? {
+    while let Some(msg_in) = stream.recv_web_transport_stream().await? {
         dbg!("received message!");
     }
     debug!("Web Transport connection closed");

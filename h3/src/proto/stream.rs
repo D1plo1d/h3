@@ -26,6 +26,8 @@ stream_types! {
     PUSH = 0x01,
     ENCODER = 0x02,
     DECODER = 0x03,
+    WEBTRANSPORT_UNIDIRECTIONAL = 0x54,
+    WEBTRANSPORT_BIDIRECTIONAL = 0x41,
 }
 
 impl StreamType {

@@ -90,6 +90,9 @@ impl Frame<PayloadLen> {
                 buf.advance(len as usize);
                 Err(FrameError::UnknownFrame(ty.0))
             }
+            FrameType::WEBTRANSPORT_STREAM => {
+                panic!("RECEIVED WEB TRANSPORT STREAM FRAME");
+            }
             FrameType::H2_PRIORITY
             | FrameType::H2_PING
             | FrameType::H2_WINDOW_UPDATE
@@ -277,6 +280,7 @@ frame_types! {
     MAX_PUSH_ID = 0xD,
     DATAGRAM_WITHOUT_LENGTH = 0x30,
     DATAGRAM_WITH_LENGTH = 0x31,
+    WEBTRANSPORT_STREAM = 0x54,
 }
 
 impl FrameType {
